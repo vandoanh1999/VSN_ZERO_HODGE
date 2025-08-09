@@ -1,0 +1,15 @@
+# VSN Framework: Core Theoretical Concepts
+
+## 1. Variational Symplectic Normalization (VSN)
+VSN is a property of cohomology classes characterized by period orthogonality with a basis of cycles derived from a Picard–Fuchs system. It is a quantum--functorial framework that provides a bridge between classical Hodge theory and the computational aspects of algebraic cycles.
+
+## 2. The Hodge–VSN Operator
+- **Definition:** The operator is defined by its action on cohomology classes via period orthogonality.
+- **Core Principle:** It leverages the intrinsic structure of the variation of Hodge structures (VHS) to test whether a cohomology class belongs to the Hodge subspace.
+- **Relation to Lefschetz:** While its kernel is equivalent to that of the Lefschetz operator on K3 surfaces, VSN's origin from period-VHS data makes it a distinct and computationally advantageous approach.
+
+## 3. The Functorial Bridge
+VSN is proposed as a functorial bridge that maps period data from the mirror manifold to specific algebraic cycles on the original manifold. This provides a constructive method for cycle generation and connects the geometry of the variety to the analytic properties of its periods.
+
+## 4. Quantum Extension
+The VSN framework is posited to extend into a "quantum" regime. This suggests that the VSN operator may have a deformation theory linked to quantum invariants or other quantum field theory concepts, enabling it to handle more complex cycle constructions and classifications.
