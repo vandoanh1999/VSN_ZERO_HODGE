@@ -1,0 +1,3 @@
+Dataset,Dim(H^{p,p}),Time(VSN),Time(baseline),RelErr,Notes
+k3_quartic_rank20,20,1.23,3.56,0.001,"20 cycles on a quartic K3 surface"
+cy3_toric_batyrev,15,0.89,2.81,0.002,"15 cycles on a specific toric CY3"
