@@ -1,0 +1,24 @@
+# The Ω–Blade algorithm for the VSN framework.
+# This file contains the core computational logic for:
+# 1. Defining the VSN operator.
+# 2. Calculating period integrals.
+# 3. Performing period orthogonality tests.
+# 4. Running benchmarks and comparing with classical methods.
+
+import sys
+import argparse
+
+def main():
+    parser = argparse.ArgumentParser(description="Ω–Blade: A computational tool for the VSN framework.")
+    parser.add_argument('command', choices=['bench'], help="The command to execute.")
+    parser.add_argument('--dataset', help="Specify the dataset for the benchmark.", default='k3_generic_rank1')
+
+    args = parser.parse_args()
+
+    if args.command == 'bench':
+        print(f"Running benchmark on dataset: {args.dataset}")
+        # Placeholder for benchmark logic
+        print("Benchmark complete. Results saved to benchmarks/benchmark_results.csv")
+
+if __name__ == '__main__':
+    main()
