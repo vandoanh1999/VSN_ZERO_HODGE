@@ -1,199 +1,44 @@
-#!/usr/bin/env python3
-# Ω–Blade: benchmark scaffold for VSN framework
-# This file contains the core computational logic for the project.
-
-import argparse, csv, time, random, math
-from pathlib import Path
-from datetime import datetime
-
-random.seed(42) # Seed for reproducibility
-
-BENCH_DIR = Path("benchmarks")
-CSV_PATH = BENCH_DIR / "benchmark_results.csv"
-HEADER = ["Dataset","Dim(H^{p,p})","Time(VSN)","Time(baseline)","RelErr","Notes"]
-
-# ====== Helper functions for the algorithms ======
-def legendre_nodes_weights(n):
-    # Gauss–Legendre nodes and weights (approximation for small n)
-    # Using math lib to avoid numpy dependency for Termux
-    from math import cos, pi
-    xs = [cos(pi*(k-0.25)/(n+0.5)) for k in range(1, n+1)]
-    ws = [pi/(n+0.5)] * n
-    return xs, ws
-
-def period_integral(f, a, b, n=64):
-    # Change of variables [-1,1] -> [a,b] for Gauss–Legendre quadrature
-    xs, ws = legendre_nodes_weights(n)
-    mid = 0.5*(a+b); half = 0.5*(b-a)
-    s = 0.0
-    for x, w in zip(xs, ws):
-        t = mid + half*x
-        s += w * f(t)
-    return s * half
-
-def gram_projection(vecs, v):
-    # Project v onto the span of vecs using Gram-Schmidt
-    def dot(a, b): return sum(x*y for x, y in zip(a, b))
-    basis = []
-    for u in vecs:
-        w = list(u)
-        for b in basis:
-            c = dot(w, b) / dot(b, b)
-            for i in range(len(w)): w[i] -= c * b[i]
-        if abs(dot(w, w)) > 1e-12:
-            nrm = math.sqrt(dot(w, w))
-            basis.append([x / nrm for x in w])
-    proj = [0.0] * len(v)
-    for b in basis:
-        c = sum(x * y for x, y in zip(v, b))
-        for i in range(len(v)): proj[i] += c * b[i]
-    return proj
-
-def solve_linear(A, b):
-    # Simple Gauss–Jordan solver (A: n×n, b: n)
-    n = len(A)
-    M = [row[:] + [b[i]] for i, row in enumerate(A)]
-    for col in range(n):
-        pivot = max(range(col, n), key=lambda r: abs(M[r][col]))
-        if abs(M[pivot][col]) < 1e-12:
-            raise ValueError("Singular matrix")
-        M[col], M[pivot] = M[pivot], M[col]
-        piv = M[col][col]
-        for j in range(col, n + 1): M[col][j] /= piv
-        for r in range(n):
-            if r == col: continue
-            f = M[r][col]
-            for j in range(col, n + 1):
-                M[r][j] -= f * M[col][j]
-    return [M[i][n] for i in range(n)]
-
-# ====== Placeholder Basis Functions ======
-def f0(t): return 1.0
-def f1(t): return t
-def f2(t): return t * t
-def f3(t): return (1.0 - t * t)
-
-def feature_k3(a, b):
-    mid = 0.5 * (a + b)
-    return [1.0, mid, mid * mid]
-
-def feature_cy3(a, b):
-    span = (b - a)
-    return [span, span * span, 1.0]
-
-# ====== Dataset Definition ======
 DATASETS = {
-    "k3_generic_rank1": {
-        "dim": 20,
-        "notes": "quartic K3 surface (toy periods)",
-        "interval": (0.0, 1.0),
-        "basis": [f0, f1, f2],
-        "quad_n": 64,
-        "feature": feature_k3,
-    },
-    "cy3_toric_batyrev": {
-        "dim": 15,
-        "notes": "toric CY3 (toy periods)",
-        "interval": (-1.0, 1.0),
-        "basis": [f0, f1, f3],
-        "quad_n": 64,
-        "feature": feature_cy3,
-    },
-    "k3_quartic_rank20": {
-        "dim": 20,
-        "notes": "K3 quartic high-rank (toy)",
-        "interval": (0.0, 2.0),
-        "basis": [f0, f1, f2, f3],
-        "quad_n": 96,
-        "feature": feature_k3,
-    },
-    "cy3_mirror_symm": {
-        "dim": 15,
-        "notes": "CY3 mirror-symmetric case (toy)",
-        "interval": (-2.0, 2.0),
-        "basis": [f0, f2, f3],
-        "quad_n": 96,
-        "feature": feature_cy3,
-    },
-}
-
-# ====== VSN and Baseline Algorithms ======
-def vsn_compute(ds_name: str):
-    meta = DATASETS[ds_name]
-    a, b = meta["interval"]
-    basis = meta["basis"]
-    periods = [period_integral(f, a, b, n=meta["quad_n"]) for f in basis]
-    v = meta["feature"](a, b)
-    vecs = [[p if i == j else 0.0 for i in range(len(basis))] for j, p in enumerate(periods)]
-    proj = gram_projection(vecs, v)
-    val = sum(x * x for x in proj)
-    return val
-
-def baseline_compute(ds_name: str):
-    meta = DATASETS[ds_name]
-    a, b = meta["interval"]
-    basis = meta["basis"]
-    n_basis = len(basis)
-    M = [[period_integral(lambda t, i=i, j=j: basis[i](t) * basis[j](t), a, b, n=meta["quad_n"])
-          for j in range(n_basis)] for i in range(n_basis)]
-    v = [period_integral(basis[i], a, b, n=meta["quad_n"]) for i in range(n_basis)]
-    x = solve_linear(M, v)
-    return sum(xi * xi for xi in x)
-
-# ====== Main function and benchmark runner ======
-def timeit(fn, *a, **kw):
-    t0 = time.perf_counter()
-    out = fn(*a, **kw)
-    t1 = time.perf_counter()
-    return out, t1 - t0
-
-def ensure_csv():
-    BENCH_DIR.mkdir(parents=True, exist_ok=True)
-    if not CSV_PATH.exists():
-        with CSV_PATH.open("w", newline="") as f:
-            csv.DictWriter(f, fieldnames=HEADER).writeheader()
-
-def write_row(row: dict):
-    with CSV_PATH.open("a", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=HEADER)
-        w.writerow(row)
-        f.flush()
-
-def run_bench(ds_name: str):
-    if ds_name not in DATASETS:
-        raise SystemExit(f"Unknown dataset: {ds_name}. Choices: {', '.join(DATASETS)}")
-
-    meta = DATASETS[ds_name]
-
-    # warmup
-    vsn_compute(ds_name); baseline_compute(ds_name)
-
-    _, t_vsn = timeit(vsn_compute, ds_name)
-    _, t_base = timeit(baseline_compute, ds_name)
-
-    rel_err = 0.001 if "k3" in ds_name else 0.002
-
-    row = {
-        "Dataset": ds_name,
-        "Dim(H^{p,p})": meta["dim"],
-        "Time(VSN)": round(t_vsn, 2),
-        "Time(baseline)": round(t_base, 2),
-        "RelErr": rel_err,
-        "Notes": meta["notes"],
-    }
-    write_row(row)
-    print(f"Benchmark complete. Results saved to {CSV_PATH}")
-
-def main():
-    p = argparse.ArgumentParser(description="Ω–Blade: VSN benchmark runner")
-    p.add_argument("command", choices=["bench"])
-    p.add_argument("--dataset", default="k3_generic_rank1")
-    args = p.parse_args()
+    # Các bộ dữ liệu hiện có
+    "k3_quartic_rank20": {...},
+    "cy3_toric_batyrev": {...},
     
-    ensure_csv()
-    if args.command == "bench":
-        print(f"Running benchmark on dataset: {args.dataset}")
-        run_bench(args.dataset)
-
-if __name__ == "__main__":
-    main()
+    # Bổ sung các bộ dữ liệu mới
+    "k3_generic_rank1": {
+        "type": "K3",
+        "dim": 20,
+        "defining_poly": "x0^4 + x1^4 + x2^4 + x3^4 - 12*x0*x1*x2*x3",
+        "vars": symbols('x0 x1 x2 x3'),
+        "cohomology": {(1,1): 20}
+    },
+    "cy3_quintic": {
+        "type": "CalabiYau",
+        "dim": 3,
+        "defining_poly": "x0^5 + x1^5 + x2^5 + x3^5 + x4^5 - 5*x0*x1*x2*x3*x4",
+        "vars": symbols('x0 x1 x2 x3 x4'),
+        "cohomology": {(2,1): 101, (1,1): 1}
+    },
+    "cy3_mirror_quintic": {
+        "type": "CalabiYau",
+        "dim": 3,
+        "defining_poly": "x0^5 + x1^5 + x2^5 + x3^5 + x4^5 - 5*ψ*x0*x1*x2*x3*x4",
+        "vars": symbols('x0 x1 x2 x3 x4'),
+        "parameters": {"ψ": 0.5+0.5j},
+        "cohomology": {(2,1): 101, (1,1): 1}
+    },
+    "k3_elliptic": {
+        "type": "K3",
+        "dim": 2,
+        "defining_poly": "y^2*z - x^3 - a*x*z^2 - b*z^3",
+        "vars": symbols('x y z'),
+        "parameters": {"a": -1, "b": 0},
+        "cohomology": {(1,1): 20}
+    },
+    "cy3_complete_intersection": {
+        "type": "CalabiYau",
+        "dim": 3,
+        "defining_poly": ["x0^3 + x1^3 + x2^3 + x3^3 + x4^3", "x0*x1 + x2*x3 + x4^2"],
+        "vars": symbols('x0 x1 x2 x3 x4'),
+        "cohomology": {(2,1): 73, (1,1): 2}
+    }
+}
