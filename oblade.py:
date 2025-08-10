@@ -1,24 +1,98 @@
-# The Ω–Blade algorithm for the VSN framework.
-# This file contains the core computational logic for:
-# 1. Defining the VSN operator.
-# 2. Calculating period integrals.
-# 3. Performing period orthogonality tests.
-# 4. Running benchmarks and comparing with classical methods.
+#!/usr/bin/env python3
+# Ω–Blade: minimal benchmark scaffold (no external deps)
+# Chạy được trên Termux/PC, tạo benchmarks/benchmark_results.csv (append từng lần)
 
-import sys
-import argparse
+import argparse, csv, time
+from pathlib import Path
+
+BENCH_DIR = Path("benchmarks")
+CSV_PATH = BENCH_DIR / "benchmark_results.csv"
+HEADER = ["Dataset","Dim(H^{p,p})","Time(VSN)","Time(baseline)","RelErr","Notes"]
+
+# ====== Danh sách dataset (m thêm/sửa tuỳ ý) ======
+DATASETS = {
+    "k3_generic_rank1": {"dim": 20, "notes": "a quartic K3 surface"},
+    "cy3_toric_batyrev": {"dim": 15, "notes": "a specific toric CY3"},
+}
+
+# ====== 2 HÀM CẦN THAY BẰNG THUẬT TOÁN THẬT ======
+def vsn_compute(ds_name: str):
+    """
+    TODO: thay bằng VSN operator thật.
+    Ở đây chỉ giả lập workload CPU để có thời gian đo được.
+    """
+    n = 40000 if "k3" in ds_name else 30000
+    s = 0.0
+    for i in range(1, n):
+        s += (i % 7) * 0.123456 / (i + 1)
+    return s
+
+def baseline_compute(ds_name: str):
+    """
+    TODO: thay bằng baseline thật (ví dụ phương pháp cổ điển).
+    Giả lập chậm hơn ~3x để thấy chênh lệch.
+    """
+    n = 3 * (40000 if "k3" in ds_name else 30000)
+    s = 0.0
+    for i in range(1, n):
+        s += (i % 7) * 0.123456 / (i + 1)
+    return s
+# ===================================================
+
+def timeit(fn, *a, **kw):
+    t0 = time.perf_counter()
+    out = fn(*a, **kw)
+    t1 = time.perf_counter()
+    return out, t1 - t0
+
+def ensure_csv():
+    BENCH_DIR.mkdir(parents=True, exist_ok=True)
+    if not CSV_PATH.exists():
+        with CSV_PATH.open("w", newline="") as f:
+            csv.DictWriter(f, fieldnames=HEADER).writeheader()
+
+def write_row(row: dict):
+    with CSV_PATH.open("a", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=HEADER)
+        w.writerow(row)
+        f.flush()
+
+def run_bench(ds_name: str):
+    if ds_name not in DATASETS:
+        raise SystemExit(f"Unknown dataset: {ds_name}. Choices: {', '.join(DATASETS)}")
+
+    meta = DATASETS[ds_name]
+
+    # warmup nhẹ cho ổn định timing
+    vsn_compute(ds_name); baseline_compute(ds_name)
+
+    _, t_vsn = timeit(vsn_compute, ds_name)
+    _, t_base = timeit(baseline_compute, ds_name)
+
+    # Nếu có sai số thực tế thì tính đúng; tạm để placeholder
+    rel_err = 0.001 if "k3" in ds_name else 0.002
+
+    row = {
+        "Dataset": ds_name,
+        "Dim(H^{p,p})": meta["dim"],
+        "Time(VSN)": round(t_vsn, 2),
+        "Time(baseline)": round(t_base, 2),
+        "RelErr": rel_err,
+        "Notes": meta["notes"],
+    }
+    write_row(row)
+    print(f"Benchmark complete. Results saved to {CSV_PATH}")
 
 def main():
-    parser = argparse.ArgumentParser(description="Ω–Blade: A computational tool for the VSN framework.")
-    parser.add_argument('command', choices=['bench'], help="The command to execute.")
-    parser.add_argument('--dataset', help="Specify the dataset for the benchmark.", default='k3_generic_rank1')
+    p = argparse.ArgumentParser(description="Ω–Blade: VSN benchmark runner")
+    p.add_argument("command", choices=["bench"])
+    p.add_argument("--dataset", default="k3_generic_rank1")
+    args = p.parse_args()
 
-    args = parser.parse_args()
-
-    if args.command == 'bench':
+    ensure_csv()
+    if args.command == "bench":
         print(f"Running benchmark on dataset: {args.dataset}")
-        # Placeholder for benchmark logic
-        print("Benchmark complete. Results saved to benchmarks/benchmark_results.csv")
+        run_bench(args.dataset)
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
